@@ -216,6 +216,29 @@ For commercial/paid licensing or partnership inquiries, please contact:
 
 **📧 xxddaochang@outlook.com**
 
+## What's next · Paid / Custom development
+
+The following are **not on the open-source roadmap** — they're available
+as paid, commissioned work:
+
+- **Server-side multi-user auth** — proper accounts and permissions so
+  one instance can host a whole team (beyond today's single-user
+  loopback assumption).
+- **Deeper AI ↔ Terminal integration** — the assistant reads and writes
+  the PTY directly, assists with debugging, and proposes commands for
+  one-click execution.
+- **Explorer ↔ Terminal ↔ AI, coordinated** — file context flows into
+  the terminal, terminal output flows into the AI, one stitched
+  workflow.
+
+> [!TIP]
+> All of this takes real engineering time — **"xiaodao" has to eat, too**
+> 🍚. If any of the above fits what you need, or if you have a different
+> ask, drop me a mail. I'll quote against scope and we'll iron out the
+> details over email.
+>
+> 📧 **xxddaochang@outlook.com**
+
 ## Pre-publish checklist
 
 Before running `git push` on a fork or mirror:
