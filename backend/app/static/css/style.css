@@ -1,0 +1,255 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+    --bg-dark: #0f172a;
+    --bg-panel: #1e293b;
+    --border-color: #334155;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --accent-color: #3b82f6;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --error-color: #ef4444;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Resizers */
+.resizer-handle {
+    transition: background 0.2s;
+}
+
+.resizer-handle:hover {
+    background: var(--accent-color);
+}
+
+.resizer-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.resizer-handle:hover::after {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+/* AI Thinking Block */
+details.thinking-block {
+    margin: 0.5rem 0;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.4);
+    font-size: 0.85em;
+}
+
+details.thinking-block summary {
+    padding: 0.5rem 0.75rem;
+    background: rgba(30, 41, 59, 0.5);
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text-secondary);
+    user-select: none;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+details.thinking-block summary:hover {
+    background: rgba(30, 41, 59, 0.8);
+    color: var(--text-primary);
+}
+
+details.thinking-block[open] summary {
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+details.thinking-block .content {
+    padding: 0.75rem;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    background: rgba(15, 23, 42, 0.2);
+}
+
+/* Chat Bubbles */
+.chat-bubble {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    transition: transform 0.1s;
+}
+
+/* Code Blocks */
+.prose pre {
+    margin: 0.75em 0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background: #0d1117 !important;
+}
+
+.prose code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+}
+
+/* Terminal Tabs */
+.tab-active {
+    background: #1e1e1e;
+    border-top: 2px solid var(--accent-color);
+    color: #fff;
+}
+
+.tab-inactive {
+    background: #2d2d2d;
+    color: #9ca3af;
+    border-top: 2px solid transparent;
+}
+
+.tab-inactive:hover {
+    background: #333;
+    color: #e5e7eb;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animation-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Toast */
+.toast-enter {
+    animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Code Block Icon Buttons */
+.code-action-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: #475569;
+    /* 更低对比度 */
+    opacity: 0.4;
+    /* 默认半透明 */
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    /* 更流畅的动画 */
+    font-size: 14px;
+    position: relative;
+}
+
+.code-action-icon-btn:hover {
+    background: rgba(100, 116, 139, 0.15);
+    color: #94a3b8;
+    opacity: 1;
+    /* hover 时完全不透明 */
+    transform: translateY(-1px) scale(1.05);
+    /* 添加缩放效果 */
+}
+
+.code-action-icon-btn:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Copy button */
+.code-action-icon-btn.copy-btn:hover {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* To Term button */
+.code-action-icon-btn.toterm-btn:hover {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+/* Run button */
+.code-action-icon-btn.run-btn:hover {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+/* Success state */
+.code-action-icon-btn.success {
+    color: #10b981 !important;
+    background: rgba(16, 185, 129, 0.15) !important;
+}
+
+/* Error state */
+.code-action-icon-btn.error {
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.15) !important;
+}
+
+/* Spinner animation */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.fa-spinner.fa-spin {
+    animation: spin 1s linear infinite;
+}

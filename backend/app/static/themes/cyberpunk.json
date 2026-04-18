@@ -1,0 +1,30 @@
+{
+    "name": "cyberpunk",
+    "displayName": "Cyberpunk",
+    "description": "赛博朋克风格,未来感十足",
+    "author": "AI-TERM Team",
+    "version": "1.0.0",
+    "terminal": {
+        "background": "#0d0221",
+        "foreground": "#00ff41",
+        "cursor": "#00ff41",
+        "selectionBackground": "#ff003c",
+        "black": "#000000",
+        "red": "#ff003c",
+        "green": "#00ff41",
+        "yellow": "#fffc00",
+        "blue": "#00b8ff",
+        "magenta": "#d300c4",
+        "cyan": "#00ffff",
+        "white": "#ffffff",
+        "brightBlack": "#808080",
+        "brightRed": "#ff0055",
+        "brightGreen": "#33ff66",
+        "brightYellow": "#ffff33",
+        "brightBlue": "#33ccff",
+        "brightMagenta": "#ff33ff",
+        "brightCyan": "#33ffff",
+        "brightWhite": "#ffffff"
+    },
+    "hljs": "monokai"
+}

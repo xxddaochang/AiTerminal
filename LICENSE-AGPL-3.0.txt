@@ -1,0 +1,20 @@
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+-------------------------------------------------------------------------------
+!! PLACEHOLDER !! — This file must contain the VERBATIM text of AGPL-3.0.
+!! Before publishing this repository to GitHub, run:
+!!
+!!     curl -sSL -o LICENSE-AGPL-3.0.txt https://www.gnu.org/licenses/agpl-3.0.txt
+!!
+!! OR run the helper script in this repo:
+!!
+!!     ./scripts/fetch-license.sh
+!!
+!! The AGPL requires the full license text to accompany all distributions.
+!! Do NOT publish without replacing this placeholder.
+-------------------------------------------------------------------------------
+
+For the complete authoritative text, see:
+  https://www.gnu.org/licenses/agpl-3.0.txt
+  https://www.gnu.org/licenses/agpl-3.0.html

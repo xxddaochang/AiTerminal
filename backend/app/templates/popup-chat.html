@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-TERM Chat</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Highlight.js -->
+    <link rel="stylesheet" id="hljs-theme"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .chat-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .chat-input-area {
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            padding: 1rem;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }
+
+        .message.user {
+            background: #1e40af;
+            margin-left: 2rem;
+        }
+
+        .message.ai {
+            background: #1e293b;
+            margin-right: 2rem;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="chat-container">
+            <!-- Header -->
+            <div class="chat-header">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-robot text-blue-400"></i>
+                    <span class="font-bold text-lg">AI-TERM Chat</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <select v-model="activeModel" @change="handleModelChange"
+                            class="appearance-none bg-[#0f172a] text-gray-300 text-xs px-3 py-1.5 pr-8 rounded border border-gray-700 hover:border-gray-600 focus:border-blue-500 focus:outline-none cursor-pointer transition-colors">
+                            <option value="deepseek">🚀 DeepSeek</option>
+                            <option value="doubao">🥟 Doubao (豆包)</option>
+                            <option value="qwen">🟢 Qwen (通义千问)</option>
+                        </select>
+                        <i
+                            class="fas fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="chat-messages custom-scrollbar" ref="chatContainer">
+                {% raw %}
+                <div v-for="(msg, idx) in chatHistory" :key="idx" :class="['message', msg.role]">
+                    <div v-if="msg.role === 'user'" class="text-white">
+                        {{ msg.content }}
+                    </div>
+                    <div v-else class="text-gray-200" v-html="renderMarkdown(msg.content)"></div>
+                </div>
+                {% endraw %}
+            </div>
+
+            <!-- Input -->
+            <div class="chat-input-area">
+                <!-- Fix 4: Context Chips Display -->
+                <div v-if="contextChips && contextChips.length > 0"
+                    class="flex flex-wrap gap-2 mb-2 max-h-20 overflow-y-auto custom-scrollbar">
+                    {% raw %}
+                    <div v-for="(chip, idx) in contextChips" :key="chip.label + idx"
+                        class="flex items-center gap-2 bg-[#0f172a] text-blue-400 px-2 py-1 rounded border border-blue-500/30 text-xs shadow-sm">
+                        <span :class="chip.type === 'term' ? 'fas fa-terminal' : 'fas fa-quote-right'"></span>
+                        <span class="max-w-[150px] truncate">{{ chip.label || 'Context' }}</span>
+                        <!-- Read-only in popup for now as it mirrors main state -->
+                    </div>
+                    {% endraw %}
+                </div>
+
+                <div class="flex gap-2">
+                    <input v-model="inputMessage" @keypress.enter="sendMessage" type="text"
+                        :placeholder="isLoading ? 'AI 正在思考...' : '输入消息...'" :disabled="isLoading"
+                        class="flex-1 bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-2 outline-none focus:border-blue-500 text-white disabled:opacity-50">
+
+                    <button v-if="!isLoading" @click="sendMessage"
+                        class="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-colors">
+                        发送
+                    </button>
+                    <button v-else @click="stopGeneration"
+                        class="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-lg font-bold transition-colors flex items-center gap-2">
+                        <i class="fas fa-stop"></i> 停止
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Floating Action Buttons (Text Selection) -->
+        <div v-if="selectionOverlay.visible && selectionOverlay.text"
+            :style="{ top: selectionOverlay.y + 'px', left: selectionOverlay.x + 'px', transform: 'translateX(-50%)' }"
+            class="fixed z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl border border-gray-700 flex overflow-hidden">
+            <button @click.stop.prevent="sendToTerm"
+                class="px-3 py-2 hover:bg-blue-600 transition-colors border-r border-gray-700 flex items-center gap-2">
+                <span>💻</span> To Term
+            </button>
+            <button @click.stop.prevent="copySelection"
+                class="px-3 py-2 hover:bg-blue-600 transition-colors flex items-center gap-2">
+                <span>📋</span> Copy
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, nextTick, onUnmounted } = Vue;
+
+        createApp({
+            setup() {
+                const chatHistory = ref([]);
+                const inputMessage = ref('');
+                const chatContainer = ref(null);
+                const contextChips = ref([]); // Fix 4: Context Chips State
+                const activeModel = ref('deepseek');
+                const selectionOverlay = ref({ visible: false, x: 0, y: 0, text: '' });
+                const isLoading = ref(false); // Add isLoading state
+
+                // Broadcast Channel
+                const broadcastChannel = new BroadcastChannel('ai-term-sync');
+
+                // Highlight.js Theme Map
+                const HLJS_THEME_MAP = {
+                    dark: 'atom-one-dark',
+                    light: 'github',
+                    dracula: 'dracula',
+                    cyberpunk: 'monokai',
+                    vscode: 'vs2015'
+                };
+
+                const switchHljsTheme = (theme) => {
+                    const hljsTheme = HLJS_THEME_MAP[theme] || 'atom-one-dark';
+                    const link = document.getElementById('hljs-theme');
+                    if (link) {
+                        link.href = `https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/${hljsTheme}.min.css`;
+                    }
+                };
+
+                // Render Markdown with Code Actions
+                const renderMarkdown = (text) => {
+                    if (!marked) return text;
+                    if (typeof text !== 'string') text = String(text || '');
+
+                    const renderer = new marked.Renderer();
+                    renderer.code = (entry, langIfString) => {
+                        let code = entry;
+                        let lang = langIfString;
+
+                        // Handle new marked.js signature (object)
+                        if (typeof entry === 'object' && entry !== null) {
+                            code = entry.text || entry.code || '';
+                            lang = entry.lang || langIfString || '';
+                        }
+
+                        const codeId = `code-${Math.random().toString(36).substr(2, 9)}`;
+
+                        // Syntax Highlight
+                        let highlighted = code;
+                        if (window.hljs && lang) {
+                            try {
+                                const res = window.hljs.highlight(code, { language: lang });
+                                if (res && res.value) highlighted = res.value;
+                            } catch (e) {
+                                console.warn('HLJS Error:', e);
+                            }
+                        }
+
+                        // Buttons
+                        let buttons = `
+                            <button onclick="window.handleCodeAction('copy', '${codeId}')" class="text-gray-400 hover:text-white px-1.5 transition-colors" title="Copy">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <button onclick="window.handleCodeAction('toterm', '${codeId}')" class="text-gray-400 hover:text-blue-400 px-1.5 transition-colors" title="Paste to Terminal">
+                                <i class="fas fa-terminal"></i>
+                            </button>
+                        `;
+
+                        if (['bash', 'sh', 'shell', 'python', 'py'].includes(lang)) {
+                            buttons += `
+                                <button onclick="window.handleCodeAction('run', '${codeId}')" class="text-gray-400 hover:text-red-400 px-1.5 transition-colors" title="Run in Terminal">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                            `;
+                        }
+
+                        return `
+                            <div class="code-block-wrapper relative group my-3 rounded-lg overflow-hidden border border-gray-700/50 hover:border-gray-600 transition-all">
+                                <div class="code-header flex items-center justify-between px-4 py-1.5 bg-[#0f172a] border-b border-gray-700/50">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">${lang || 'text'}</span>
+                                    <div class="flex items-center gap-1">
+                                        ${buttons}
+                                    </div>
+                                </div>
+                                <pre class="hljs bg-[#1e293b] p-4 overflow-x-auto text-sm m-0 leading-relaxed custom-scrollbar" data-code-id="${codeId}"><code class="language-${lang}">${highlighted}</code></pre>
+                            </div>
+                        `;
+                    };
+
+                    return marked.parse(text || '', { renderer });
+                };
+
+                // Global Action Handler (for onClick in HTML strings)
+                // Fix: Ensure availability and access to broadcastChannel
+                window.handleCodeAction = (action, codeId) => {
+                    const block = document.querySelector(`pre[data-code-id="${codeId}"] code`);
+                    if (!block) return;
+                    const code = block.textContent || block.innerText; // Fallback
+                    console.log('Action:', action, 'Code length:', code.length);
+
+                    if (action === 'copy') {
+                        navigator.clipboard.writeText(code);
+                    } else if (action === 'toterm') {
+                        broadcastChannel.postMessage({
+                            type: 'execute_command',
+                            data: { action: 'input', code: code }
+                        });
+                    } else if (action === 'run') {
+                        // Fix 1: Add confirmation
+                        if (confirm('确定要在终端执行这段代码吗?\nAre you sure you want to run this code in terminal?')) {
+                            const cmdId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                            broadcastChannel.postMessage({
+                                type: 'execute_command',
+                                data: { action: 'run', code: code, id: cmdId }
+                            });
+                        }
+                    }
+                };
+
+                const scrollToBottom = () => {
+                    nextTick(() => {
+                        if (chatContainer.value) {
+                            chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+                        }
+                    });
+                };
+
+                const sendMessage = (explicitId = null) => {
+                    // Fix: If called from event listener, explicitId is a PointerEvent. 
+                    if (explicitId && typeof explicitId !== 'string') {
+                        explicitId = null;
+                    }
+
+                    if (!inputMessage.value.trim() && contextChips.value.length === 0 || isLoading.value) return;
+
+                    // Generate ID
+                    const msgId = explicitId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+                    // Optimistic Update: Add to local history immediately
+                    const optimisticMsg = {
+                        role: 'user',
+                        content: inputMessage.value, // Note: Context chips are appended in main.js logic, but for UI display simply showing input is often enough or we can duplicate logic. 
+                        // For consistency, let's just show raw input. Main window will broadcast the "official" message record later, but we ignore it by ID.
+                        id: msgId,
+                        timestamp: Date.now()
+                    };
+
+                    // If we want to show context in popup too, we might need to append it locally 
+                    // BUT main.js does: finalMessage = input + context.
+                    // Let's just push simple input for now to be snappy. 
+                    // broadcasting 'trigger_chat' sends the *content* and *id*.
+                    // Main window constructs the full object.
+
+                    chatHistory.value.push(optimisticMsg);
+                    scrollToBottom();
+
+                    // Send to Main for processing
+                    // Strip Proxies
+                    const payload = JSON.parse(JSON.stringify({ content: inputMessage.value, id: msgId }));
+                    try {
+                        broadcastChannel.postMessage({
+                            type: 'trigger_chat',
+                            data: payload
+                        });
+                        inputMessage.value = '';
+                        // contextChips.value = []; // Wait for main to clear it via sync
+                        scrollToBottom();
+                        isLoading.value = true; // Set local loading state immediately
+                    } catch (e) {
+                        console.error('Popup Send Error:', e);
+                        // Revert optimistic update on error
+                        chatHistory.value.pop();
+                        alert('Failed to send message: ' + e.message);
+                    }
+                };
+
+                const stopGeneration = () => {
+                    if (confirm('确定要停止生成吗?\nAre you sure you want to stop generation?')) {
+                        broadcastChannel.postMessage({ type: 'stop_generation' });
+                        isLoading.value = false;
+                    }
+                };
+
+                const syncWithMain = () => {
+                    broadcastChannel.postMessage({ type: 'request_history' });
+                };
+
+                const handleModelChange = () => {
+                    broadcastChannel.postMessage({
+                        type: 'change_model',
+                        data: { provider: activeModel.value } // activeModel is value string, safe.
+                    });
+                };
+
+                // --- Selection Handling ---
+                const handleSelection = () => {
+                    const selection = window.getSelection();
+                    const text = selection.toString().trim();
+
+                    if (text) {
+                        const range = selection.getRangeAt(0);
+                        const rect = range.getBoundingClientRect();
+
+                        selectionOverlay.value = {
+                            visible: true,
+                            x: rect.left + rect.width / 2,
+                            y: rect.top - 40, // Above text
+                            text: text
+                        };
+                    } else {
+                        selectionOverlay.value.visible = false;
+                    }
+                };
+
+                const copySelection = () => {
+                    if (selectionOverlay.value.text) {
+                        navigator.clipboard.writeText(selectionOverlay.value.text);
+                        selectionOverlay.value.visible = false;
+                        window.getSelection().removeAllRanges();
+                    }
+                };
+
+                const sendToTerm = () => {
+                    if (selectionOverlay.value.text) {
+                        const cmdId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                        // Strip Proxies
+                        const payload = JSON.parse(JSON.stringify({ action: 'input', code: selectionOverlay.value.text, id: cmdId }));
+                        broadcastChannel.postMessage({
+                            type: 'execute_command',
+                            data: payload
+                        });
+                        selectionOverlay.value.visible = false;
+                        window.getSelection().removeAllRanges();
+                        // Focus main window if possible? 
+                        // We can't focus main window from popup programmatically in most browsers.
+                        // But sending the message should work.
+                    }
+                };
+
+                onMounted(() => {
+                    // Listen for messages from main window
+                    broadcastChannel.onmessage = (event) => {
+                        const { type, data, chatHistory: initialHistory, config: initialConfig, content } = event.data;
+
+                        if (type === 'initChat') {
+                            chatHistory.value = initialHistory || [];
+                            if (initialConfig && initialConfig.activeProvider) {
+                                activeModel.value = initialConfig.activeProvider;
+                            }
+                        } else if (type === 'config_update') {
+                            if (data.activeProvider) {
+                                activeModel.value = data.activeProvider;
+                            }
+                            // Also check for theme in config update
+                            if (data.theme) {
+                                switchHljsTheme(data.theme);
+                            }
+                        } else if (type === 'theme_update') {
+                            switchHljsTheme(data);
+                        } else if (type === 'context_update') {
+                            // Fix 4: Sync Context Chips
+                            contextChips.value = data;
+                        } else if (type === 'new_message') {
+                            // Fix 2: ID Deduplication (Match main.js logic)
+                            // Check if message with same ID already exists
+                            console.log('[Popup] Received new_message:', data.id);
+                            const exists = data.id && chatHistory.value.some(m => m.id === data.id);
+
+                            if (!exists) {
+                                // Fallback for messages without ID (legacy/system)
+                                const lastMsg = chatHistory.value[chatHistory.value.length - 1];
+                                const isDuplicateContent = !data.id && lastMsg && lastMsg.role === data.role && lastMsg.content === data.content;
+
+                                if (!isDuplicateContent) {
+                                    chatHistory.value.push(data);
+                                    scrollToBottom();
+                                }
+                            } else {
+                                console.log('[Popup] Duplicate message ignored (Optimistic update confirmed):', data.id);
+                            }
+                        } else if (type === 'update_last_message') {
+                            if (chatHistory.value.length > 0) {
+                                // Fix: Ensure data is valid content string
+                                const content = (typeof data === 'string') ? data : (data.content || '');
+
+                                const lastMsg = chatHistory.value[chatHistory.value.length - 1];
+                                if (lastMsg) {
+                                    lastMsg.content = content;
+                                }
+                                scrollToBottom();
+                            }
+                        } else if (type === 'history_sync') {
+                            chatHistory.value = data;
+                            scrollToBottom();
+                        } else if (type === 'trigger_input') {
+                            // Append to input from main window context menu
+                            if (inputMessage.value) inputMessage.value += '\n\n';
+                            inputMessage.value += content;
+                            window.focus(); // Focus popup window
+
+                            // Focus input explicitly
+                            nextTick(() => {
+                                const input = document.querySelector('input');
+                                if (input) {
+                                    input.focus();
+                                    // Move cursor to end
+                                    // input.setSelectionRange(input.value.length, input.value.length);
+                                }
+                            });
+                        } else if (type === 'remove_last_message') {
+                            chatHistory.value.pop();
+                            scrollToBottom();
+                        } else if (type === 'loading_state') {
+                            isLoading.value = data;
+                        } else if (type === 'generation_stopped') {
+                            isLoading.value = false;
+                        } else if (type === 'generation_error') {
+                            isLoading.value = false;
+                            alert(`AI Error: ${data}`);
+                            // Optionally remove the last "thinking" message if empty
+                            const lastMsg = chatHistory.value[chatHistory.value.length - 1];
+                            if (lastMsg && lastMsg.role === 'ai' && !lastMsg.content) {
+                                chatHistory.value.pop();
+                            }
+                        }
+                    };
+
+                    // Initial Sync
+                    syncWithMain();
+
+                    // Selection Listener
+                    let selectionTimeout;
+                    document.addEventListener('selectionchange', () => {
+                        clearTimeout(selectionTimeout);
+                        selectionTimeout = setTimeout(handleSelection, 200); // Debounce
+                    });
+
+                    // Close selection on click elsewhere
+                    document.addEventListener('mousedown', (e) => {
+                        // Fix: Don't close if clicking inside the menu or on selection
+                        const menu = document.querySelector('.fixed.z-50');
+                        if (menu && menu.contains(e.target)) return;
+
+                        // Optional: Only close if selection is cleared?
+                        // selectionOverlay.value.visible = false; 
+                        // Actually, 'selectionchange' will handle clearing if selection is lost.
+                        // But clicking strictly outside should probably close it *if* selection is preserved?
+                        // Let's rely on selectionchange mostly, but if we click and selection remains, we might want to keep it.
+                        // However, clicking usually clears selection unless it's a specific action.
+                    });
+                });
+
+                return {
+                    chatHistory,
+                    inputMessage,
+                    chatContainer,
+                    contextChips,
+                    activeModel,
+                    selectionOverlay,
+                    handleModelChange,
+                    copySelection,
+                    sendToTerm,
+                    stopGeneration,
+                    isLoading,
+                    renderMarkdown,
+                    sendMessage,
+                    syncWithMain
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

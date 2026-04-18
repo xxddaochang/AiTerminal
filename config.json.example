@@ -1,0 +1,47 @@
+{
+  "_comment_1": "=================================================================",
+  "_comment_2": "AI-TERM user-level configuration template",
+  "_comment_3": "Copy to ~/.ai-term/config.json and fill in your API keys.",
+  "_comment_4": "First server start will auto-generate 'access_token' if absent.",
+  "_comment_5": "File permissions will be auto-set to 0600 on write.",
+  "_comment_6": "=================================================================",
+
+  "access_token": "LEAVE_EMPTY_OR_DELETE_THIS_LINE_TO_AUTO_GENERATE",
+
+  "activeProvider": "deepseek",
+
+  "providers": {
+    "deepseek": {
+      "_doc": "DeepSeek Chat API. See https://platform.deepseek.com",
+      "apiKey": "sk-your-deepseek-api-key-here",
+      "apiBase": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat"
+    },
+    "qwen": {
+      "_doc": "Aliyun DashScope / Qwen. See https://dashscope.aliyun.com",
+      "apiKey": "sk-your-dashscope-api-key-here",
+      "apiBase": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-max"
+    },
+    "doubao": {
+      "_doc": "Volcengine Ark / Doubao. See https://www.volcengine.com/docs/82379",
+      "apiKey": "your-ark-api-key-here",
+      "apiBase": "https://ark.cn-beijing.volces.com/api/v3",
+      "model": "doubao-1-5-pro-32k-250115"
+    },
+    "openai": {
+      "_doc": "Official OpenAI or any OpenAI-compatible endpoint",
+      "apiKey": "sk-your-openai-api-key-here",
+      "apiBase": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini"
+    }
+  },
+
+  "sync": {
+    "_doc": "Optional: WebDAV cloud sync. Leave disabled if unused.",
+    "enabled": false,
+    "url": "https://your-webdav-host/path/",
+    "username": "",
+    "password_encrypted": ""
+  }
+}

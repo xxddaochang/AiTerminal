@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-TERM</title>
+    <!-- Tailwind CSS (Dev) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        term: {
+                            bg: '#1e1e1e',
+                            text: '#d4d4d4',
+                            border: '#333333'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Xterm.js CSS -->
+    <link rel="stylesheet" href="/static/js/libs/xterm.css" />
+    <!-- Highlight.js CSS (Dynamic Theme) -->
+    <link id="hljs-theme" rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body class="bg-gray-900 text-gray-200 h-screen w-screen overflow-hidden flex flex-col">
+    <!-- App Root Wrapper -->
+    {% raw %}
+    <div id="app" class="flex flex-col h-screen w-screen overflow-hidden">
+        <!-- Header -->
+        <header
+            class="h-12 border-b border-gray-800 flex items-center px-4 bg-[#0f172a] select-none text-gray-400 shadow-sm relative z-30 shrink-0">
+            <div
+                class="font-bold text-lg tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 flex items-center gap-2">
+                AI-TERM <span
+                    class="text-[10px] text-gray-500 font-mono border border-gray-800 px-1.5 py-0.5 rounded bg-[#1e293b]">v1.6</span>
+            </div>
+            <div class="ml-auto flex items-center gap-4">
+                <div class="flex items-center gap-2 text-xs group cursor-help transition-opacity hover:opacity-100 opacity-80"
+                    title="Backend Connection Status">
+                    <span class="text-gray-500 font-medium">Status</span>
+                    <div class="flex items-center gap-1.5 bg-[#1e293b] px-2 py-1 rounded-full border border-gray-800">
+                        <div id="status-indicator"
+                            class="w-1.5 h-1.5 rounded-full bg-red-500 transition-all duration-500">
+                        </div>
+                        <span id="status-text"
+                            class="text-gray-500 font-mono hidden md:inline font-bold">Disconnected</span>
+                    </div>
+                </div>
+                <!-- Theme Toggle -->
+                <button @click="toggleTheme"
+                    class="p-1.5 hover:bg-gray-700 rounded text-yellow-500 hover:text-yellow-400 transition-transform hover:rotate-12"
+                    title="切换主题">
+                    <i v-if="config.theme === 'light'" class="fas fa-sun text-sm"></i>
+                    <i v-else class="fas fa-moon text-sm"></i>
+                </button>
+                <!-- Settings -->
+                <button @click="showSettings = !showSettings"
+                    class="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors" title="设置">
+                    <i class="fas fa-cog text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="flex-1 flex overflow-hidden relative">
+            <!-- Left Sidebar (Explorer) -->
+            <aside
+                class="w-64 bg-[#0f172a] border-r border-gray-800 flex flex-col transition-all duration-300 ease-in-out"
+                :class="{ '-ml-64': !showSidebar }" v-show="!isChatMode">
+                <!-- Header -->
+                <div class="h-12 border-b border-gray-800 flex items-center px-4 justify-between shrink-0">
+                    <span class="font-semibold text-sm tracking-wide text-gray-400">EXPLORER</span>
+                    <button @click="refreshFiles" class="text-gray-500 hover:text-white transition-colors">
+                        <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                </div>
+                <!-- File Tree -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar generic-list">
+                    <file-tree :items="files" @open-dir="loadDirectory"></file-tree>
+                </div>
+            </aside>
+
+            <!-- Main Content (Terminal) -->
+            <main class="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]" v-show="!isChatMode">
+                <!-- Tabs -->
+                <div class="h-9 bg-[#2d2d2d] flex items-center px-2 gap-1 overflow-x-auto custom-scrollbar shrink-0">
+                    <div v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)"
+                        class="h-full px-3 flex items-center gap-2 cursor-pointer transition-colors border-t-2 text-xs select-none min-w-[120px] max-w-[200px]"
+                        :class="activeTabId === tab.id ? 'bg-[#1e1e1e] text-white border-blue-500' : 'text-gray-400 border-transparent hover:bg-[#333] hover:text-gray-200'">
+                        <span class="truncate">{{ tab.name }}</span>
+                        <button @click.stop="closeTab(tab.id)"
+                            class="ml-auto w-4 h-4 hover:bg-white/10 rounded flex items-center justify-center text-gray-400 hover:text-white">
+                            ✕
+                        </button>
+                    </div>
+                    <button @click="createTab"
+                        class="h-full px-3 text-gray-500 hover:text-white hover:bg-[#333] transition-colors flex items-center justify-center"
+                        title="New Terminal">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Terminal Content -->
+                <div class="flex-1 relative bg-[#1e1e1e]">
+                    <div v-for="tab in tabs" :key="tab.id" v-show="activeTabId === tab.id" :id="'terminal-' + tab.id"
+                        class="absolute inset-0 p-1"></div>
+                </div>
+            </main>
+
+            <!-- Right: AI Agent -->
+            <aside
+                class="border-l border-gray-800 bg-[#0f172a] flex flex-col transition-all relative h-full group/agent"
+                :style="{ width: isChatMode ? '100%' : agentWidth + 'px' }" v-show="showAgent">
+                <!-- Resizer -->
+                <div class="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/50 z-10 resizer-handle transition-colors"
+                    @mousedown="startResize('right')"></div>
+
+                <!-- AI Assistant Header -->
+                <div class="h-auto border-b border-gray-800 px-4 py-3 bg-[#1e293b] shrink-0">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-robot text-blue-400"></i>
+                            <span class="font-semibold">AI Assistant</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <!-- Clear Chat -->
+                            <button @click="clearChat"
+                                class="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-red-400 transition-colors"
+                                title="清空聊天">
+                                <i class="fas fa-trash-alt text-xs"></i>
+                            </button>
+                            <!-- Pop-out Chat -->
+                            <button @click="openPopupChat"
+                                class="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-blue-400 transition-colors"
+                                title="弹出聊天窗口">
+                                <i class="fas fa-external-link-alt text-xs"></i>
+                            </button>
+                            <!-- History -->
+                            <button @click="showHistory = !showHistory"
+                                class="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+                                title="历史记录">
+                                <i class="fas fa-history text-xs"></i>
+                            </button>
+                            <button @click="showRules = true"
+                                class="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-yellow-400 transition-colors"
+                                title="提示词模板">
+                                <i class="fas fa-scroll text-xs"></i>
+                            </button>
+                            <!-- Export Chat -->
+                            <button @click="exportChat"
+                                class="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-green-400 transition-colors"
+                                title="导出聊天记录">
+                                <i class="fas fa-download text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Popup Lock Overlay -->
+                <div v-if="isPopupOpen"
+                    class="absolute inset-0 bg-black/60 z-40 flex items-center justify-center backdrop-blur-sm">
+                    <div class="bg-[#1e293b] border border-gray-700 rounded-lg p-6 text-center shadow-2xl">
+                        <i class="fas fa-lock text-blue-400 text-3xl mb-3"></i>
+                        <p class="text-white text-lg font-semibold mb-2">聊天窗口已弹出</p>
+                        <p class="text-gray-400 text-sm">请在新窗口中操作</p>
+                    </div>
+                </div>
+
+                <!-- History Overlay -->
+                <div v-if="showHistory"
+                    class="absolute inset-0 bg-[#0f172a] z-30 flex flex-col animation-fade-in custom-scrollbar">
+                    <div class="h-14 border-b border-gray-800 flex items-center justify-between px-4 bg-[#1e293b]">
+                        <h3 class="font-medium text-gray-200">Chat History</h3>
+                        <button @click="showHistory = false" class="text-gray-400 hover:text-white">✕</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-3 custom-scrollbar space-y-2">
+                        <button @click="createNewSession(); showHistory = false"
+                            class="w-full flex items-center gap-2 p-3 rounded-lg bg-blue-600/10 text-blue-400 border border-blue-600/20 hover:bg-blue-600/20 transition-all font-medium text-sm">
+                            <span>+</span> New Chat
+                        </button>
+                        <div v-for="session in chatSessions" :key="session.id" @click="loadSession(session.id)"
+                            class="group flex items-center justify-between p-3 rounded-lg cursor-pointer border border-transparent transition-all"
+                            :class="currentSessionId === session.id ? 'bg-[#1e293b] border-gray-700 shadow-sm' : 'hover:bg-[#1e293b]/50 text-gray-400'">
+                            <div class="flex-1 min-w-0">
+                                <h3
+                                    class="font-bold text-sm truncate text-gray-200 group-hover:text-white transition-colors">
+                                    {{ session.title || 'New Chat' }}
+                                </h3>
+                                <p class="text-[10px] text-gray-500 truncate mt-0.5">
+                                    {{ new Date(parseInt(session.id)).toLocaleString() }}
+                                </p>
+                            </div>
+                            <button @click="deleteSession($event, session.id)"
+                                class="opacity-0 group-hover:opacity-100 p-2 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                    </path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages Container (Middle, Scrollable) -->
+                <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar min-h-0 bg-[#0f172a]"
+                    ref="chatContainer">
+                    <div v-for="(msg, idx) in chatHistory" :key="idx"
+                        class="flex flex-col gap-2 group w-full animation-fade-in">
+
+                        <!-- Role Label -->
+                        <div class="flex items-center gap-2 px-1"
+                            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+                            <span v-if="msg.role === 'ai'"
+                                class="text-xs font-semibold text-blue-400 flex items-center gap-1.5 bg-blue-900/20 px-2 py-0.5 rounded-full border border-blue-500/20">
+                                <span class="text-[10px]">🤖</span> AI Assistant
+                            </span>
+                            <span v-if="msg.role === 'user'"
+                                class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                You <span class="text-[10px]">👤</span>
+                            </span>
+                        </div>
+
+                        <!-- Content Bubble -->
+                        <div class="max-w-[95%] chat-bubble"
+                            :class="msg.role === 'user' ? 'self-end' : 'self-start w-full'">
+
+                            <div v-if="msg.role === 'user'"
+                                class="bg-[#1e293b] text-gray-100 px-4 py-3 rounded-2xl rounded-tr-md border border-gray-700/50 shadow-sm text-sm whitespace-pre-wrap leading-relaxed">
+                                {{ msg.content }}
+                            </div>
+
+                            <div v-else class="bg-transparent text-gray-300 rounded-none w-full pl-1">
+                                <div v-if="msg.content" v-html="renderMarkdown(msg.content)"
+                                    class="prose prose-invert prose-sm max-w-none break-words leading-relaxed text-sm">
+                                </div>
+                                <span v-else class="flex gap-1.5 items-center h-6 px-2 opacity-50">
+                                    <span class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
+                                    <span class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"
+                                        style="animation-delay: 0.1s"></span>
+                                    <span class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"
+                                        style="animation-delay: 0.2s"></span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area (Fixed Bottom) -->
+                <div
+                    class="p-4 border-t border-gray-800 bg-[#1e293b] shrink-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+                    <!-- Quick Action Toolbar -->
+                    <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-800/50">
+                        <!-- Model Selector -->
+                        <div class="relative">
+                            <select v-model="config.activeProvider" @change="handleModelChange"
+                                class="appearance-none bg-[#0f172a] text-gray-300 text-xs px-3 py-1.5 pr-8 rounded border border-gray-700 hover:border-gray-600 focus:border-blue-500 focus:outline-none cursor-pointer transition-colors">
+                                <option value="deepseek">🚀 DeepSeek</option>
+                                <option value="doubao">🥟 Doubao (豆包)</option>
+                                <option value="qwen">🟢 Qwen (通义千问)</option>
+                            </select>
+                            <i
+                                class="fas fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none"></i>
+                        </div>
+
+
+
+                        <div class="flex-1"></div>
+
+                        <!-- Quick Actions -->
+                        <button @click="clearChat" title="Clear Chat"
+                            class="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors">
+                            <i class="fas fa-trash-alt text-xs"></i>
+                        </button>
+                        <button @click="exportChat" title="Export Chat"
+                            class="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors">
+                            <i class="fas fa-download text-xs"></i>
+                        </button>
+                    </div>
+
+                    <!-- Context Chips -->
+                    <div v-if="contextChips.length > 0"
+                        class="flex flex-wrap gap-2 mb-2 max-h-20 overflow-y-auto custom-scrollbar">
+                        <div v-for="(chip, idx) in contextChips" :key="idx"
+                            class="flex items-center gap-2 bg-[#0f172a] text-blue-400 px-2 py-1 rounded border border-blue-500/30 text-xs">
+                            <span :class="chip.type === 'term' ? 'fas fa-terminal' : 'fas fa-quote-right'"></span>
+                            <span class="max-w-[150px] truncate">{{ chip.label }}</span>
+                            <button @click="removeChip(idx)" class="hover:text-white transition-colors">✕</button>
+                        </div>
+                    </div>
+
+                    <div
+                        class="relative group bg-[#0f172a] rounded-xl border border-gray-700 transition-colors focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/20">
+                        <textarea v-model="inputMessage" @keydown.enter.prevent="sendMessage" :disabled="isLoading"
+                            class="w-full bg-transparent text-gray-200 p-3.5 pr-12 text-sm resize-none outline-none placeholder-gray-500 custom-scrollbar max-h-48 min-h-[50px]"
+                            :style="{ height: textAreaHeight }" @input="autoResizeTextArea"
+                            placeholder="Ask AI or type a command..."></textarea>
+
+                        <div class="absolute bottom-2 right-2 flex items-center gap-2">
+                            <button @click="sendMessage"
+                                :disabled="isLoading || (!inputMessage && contextChips.length === 0)"
+                                class="p-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-white transition-all shadow-lg flex items-center justify-center w-8 h-8">
+                                <span v-if="isLoading" class="animate-spin">⟳</span>
+                                <span v-else>➤</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-[10px] text-center text-gray-600 mt-2 select-none">
+                        AI-TERM v2.5 • <span class="hover:text-gray-400 cursor-pointer transition-colors"
+                            @click="showSettings=true">{{ currentModelName }}</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Settings Modal (Redesigned for Multi-Provider) -->
+            <div v-if="showSettings"
+                class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animation-fade-in"
+                @click.self="showSettings = false">
+                <div
+                    class="bg-[#1e293b] border border-gray-700 rounded-xl w-[800px] h-[600px] flex shadow-2xl overflow-hidden font-sans">
+
+                    <!-- Sidebar -->
+                    <div class="w-48 bg-[#0f172a] border-r border-gray-700 flex flex-col shrink-0">
+                        <div class="p-4 border-b border-gray-700 font-bold text-gray-400 text-xs tracking-wider">
+                            SETTINGS</div>
+                        <div class="flex-1 py-2 space-y-0.5">
+                            <button @click="activeSettingsTab = 'general'"
+                                class="w-full text-left px-4 py-2.5 text-sm font-medium transition-all duration-200 border-l-2"
+                                :class="activeSettingsTab === 'general' ? 'bg-[#1e293b] text-blue-400 border-blue-400' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800 border-transparent'">
+                                General
+                            </button>
+                            <div class="my-2 border-b border-gray-800 mx-4"></div>
+                            <div class="px-4 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                Models</div>
+                            <button @click="activeSettingsTab = 'deepseek'"
+                                class="w-full text-left px-4 py-2.5 text-sm font-medium transition-all duration-200 flex items-center justify-between border-l-2"
+                                :class="activeSettingsTab === 'deepseek' ? 'bg-[#1e293b] text-blue-400 border-blue-400' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800 border-transparent'">
+                                DeepSeek
+                                <span v-if="config.activeProvider === 'deepseek'"
+                                    class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></span>
+                            </button>
+                            <button @click="activeSettingsTab = 'doubao'"
+                                class="w-full text-left px-4 py-2.5 text-sm font-medium transition-all duration-200 flex items-center justify-between border-l-2"
+                                :class="activeSettingsTab === 'doubao' ? 'bg-[#1e293b] text-blue-400 border-blue-400' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800 border-transparent'">
+                                豆包 (Doubao)
+                                <span v-if="config.activeProvider === 'doubao'"
+                                    class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></span>
+                            </button>
+                            <button @click="activeSettingsTab = 'qwen'"
+                                class="w-full text-left px-4 py-2.5 text-sm font-medium transition-all duration-200 flex items-center justify-between border-l-2"
+                                :class="activeSettingsTab === 'qwen' ? 'bg-[#1e293b] text-blue-400 border-blue-400' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800 border-transparent'">
+                                通义千问 (Qwen)
+                                <span v-if="config.activeProvider === 'qwen'"
+                                    class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Content Area -->
+                    <div class="flex-1 flex flex-col bg-[#1e293b] min-w-0">
+                        <div class="flex-1 p-8 overflow-y-auto custom-scrollbar">
+
+                            <!-- General Tab -->
+                            <div v-if="activeSettingsTab === 'general'" class="space-y-6 animation-fade-in">
+                                <h3
+                                    class="text-xl font-bold text-white flex items-center gap-2 border-b border-gray-700 pb-4">
+                                    <span class="text-2xl">⚙️</span> General Settings
+                                </h3>
+
+                                <div class="space-y-2">
+                                    <label class="block text-xs uppercase font-bold text-gray-500">Appearance</label>
+                                    <div class="bg-[#0f172a] p-4 rounded-xl border border-gray-700 space-y-4">
+                                        <div class="relative">
+                                            <label class="block text-xs text-gray-400 mb-1.5">Color Theme</label>
+                                            <div class="relative">
+                                                <select v-model="config.theme"
+                                                    class="w-full bg-[#1e293b] border border-gray-600 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 text-gray-200 appearance-none cursor-pointer hover:border-gray-500 transition-colors">
+                                                    <option value="dark">Dark Default</option>
+                                                    <option value="light">Light Mode</option>
+                                                    <option value="dracula">Dracula</option>
+                                                    <option value="cyberpunk">Cyberpunk</option>
+                                                    <option value="vscode">VS Code Dark+</option>
+                                                </select>
+                                                <div
+                                                    class="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                                                    ▼</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Theme Market Button Hidden as per request -->
+                                        <!-- <button @click="openThemeMarket(); showSettings = false"
+                                            class="w-full py-2.5 bg-gradient-to-r from-purple-600/80 to-blue-600/80 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg flex items-center justify-center gap-2 border border-white/10">
+                                            <span>🎨</span> Explore Theme Market
+                                        </button> -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- DeepSeek Tab -->
+                            <div v-if="activeSettingsTab === 'deepseek'" class="space-y-6 animation-fade-in">
+                                <div class="flex items-center justify-between border-b border-gray-700 pb-4">
+                                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                                        <span class="text-2xl">🐳</span> DeepSeek
+                                    </h3>
+                                    <button v-if="config.activeProvider !== 'deepseek'"
+                                        @click="config.activeProvider = 'deepseek'; handleModelChange()"
+                                        class="px-4 py-1.5 bg-gray-700 hover:bg-emerald-600 hover:text-white rounded-full text-xs font-bold text-gray-300 transition-all shadow-sm">
+                                        Set as Active
+                                    </button>
+                                    <span v-else
+                                        class="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-bold border border-emerald-500/20 flex items-center gap-1">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                                    </span>
+                                </div>
+
+                                <div class="space-y-5">
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">API Key</label>
+                                        <div class="relative group">
+                                            <input v-model="config.providers.deepseek.apiKey"
+                                                :type="showApiKey ? 'text' : 'password'" placeholder="sk-..."
+                                                class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                            <button @click="showApiKey = !showApiKey"
+                                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1">
+                                                <span v-if="showApiKey">👁️</span><span v-else>🔒</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">Base URL</label>
+                                        <input v-model="config.providers.deepseek.baseUrl" type="text"
+                                            placeholder="https://api.deepseek.com"
+                                            class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">Model
+                                            Name</label>
+                                        <input v-model="config.providers.deepseek.model" type="text"
+                                            placeholder="deepseek-chat"
+                                            class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Doubao Tab -->
+                            <div v-if="activeSettingsTab === 'doubao'" class="space-y-6 animation-fade-in">
+                                <div class="flex items-center justify-between border-b border-gray-700 pb-4">
+                                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                                        <span class="text-2xl">🥟</span> Doubao (豆包)
+                                    </h3>
+                                    <button v-if="config.activeProvider !== 'doubao'"
+                                        @click="config.activeProvider = 'doubao'; handleModelChange()"
+                                        class="px-4 py-1.5 bg-gray-700 hover:bg-emerald-600 hover:text-white rounded-full text-xs font-bold text-gray-300 transition-all shadow-sm">
+                                        Set as Active
+                                    </button>
+                                    <span v-else
+                                        class="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-bold border border-emerald-500/20 flex items-center gap-1">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                                    </span>
+                                </div>
+
+                                <div class="space-y-5">
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">API Key</label>
+                                        <div class="relative group">
+                                            <input v-model="config.providers.doubao.apiKey"
+                                                :type="showApiKey ? 'text' : 'password'" placeholder="sk-..."
+                                                class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                            <button @click="showApiKey = !showApiKey"
+                                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1">
+                                                <span v-if="showApiKey">👁️</span><span v-else>🔒</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">Base URL</label>
+                                        <input v-model="config.providers.doubao.baseUrl" type="text"
+                                            placeholder="https://ark.cn-beijing.volces.com/api/v3"
+                                            class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <div class="flex justify-between">
+                                            <label class="block text-xs uppercase font-bold text-gray-500">Endpoint ID
+                                                (Model)</label>
+                                            <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint"
+                                                target="_blank" class="text-[10px] text-blue-400 hover:underline">Get
+                                                Endpoint ID ↗</a>
+                                        </div>
+                                        <input v-model="config.providers.doubao.model" type="text"
+                                            placeholder="ep-2024..."
+                                            class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                        <p class="text-[10px] text-gray-500">Volcengine calls this 'Endpoint ID'</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Qwen Tab -->
+                            <div v-if="activeSettingsTab === 'qwen'" class="space-y-6 animation-fade-in">
+                                <div class="flex items-center justify-between border-b border-gray-700 pb-4">
+                                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                                        <span class="text-2xl">🟢</span> Qwen (通义千问)
+                                    </h3>
+                                    <button v-if="config.activeProvider !== 'qwen'"
+                                        @click="config.activeProvider = 'qwen'; handleModelChange()"
+                                        class="px-4 py-1.5 bg-gray-700 hover:bg-emerald-600 hover:text-white rounded-full text-xs font-bold text-gray-300 transition-all shadow-sm">
+                                        Set as Active
+                                    </button>
+                                    <span v-else
+                                        class="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-bold border border-emerald-500/20 flex items-center gap-1">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                                    </span>
+                                </div>
+
+                                <div class="space-y-5">
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">API Key</label>
+                                        <div class="relative group">
+                                            <input v-model="config.providers.qwen.apiKey"
+                                                :type="showApiKey ? 'text' : 'password'" placeholder="sk-..."
+                                                class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                            <button @click="showApiKey = !showApiKey"
+                                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1">
+                                                <span v-if="showApiKey">👁️</span><span v-else>🔒</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">Base URL</label>
+                                        <input v-model="config.providers.qwen.baseUrl" type="text"
+                                            placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                                            class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-xs uppercase font-bold text-gray-500">Model
+                                            Name</label>
+                                        <input v-model="config.providers.qwen.model" type="text" placeholder="qwen-plus"
+                                            class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 text-white font-mono transition-all focus:ring-1 focus:ring-blue-500/20">
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Footer -->
+                        <div
+                            class="px-6 py-4 border-t border-gray-700 bg-[#0f172a] flex justify-between items-center shrink-0">
+                            <span class="text-xs text-gray-500 font-mono">v2.5.0</span>
+                            <div class="flex gap-3">
+                                <button @click="showSettings = false"
+                                    class="px-4 py-2 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">Cancel</button>
+                                <button @click="saveConfig"
+                                    class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 transform hover:-translate-y-0.5">
+                                    Save Configuration
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rules Modal -->
+            <div v-if="showRules"
+                class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animation-fade-in">
+                <div
+                    class="bg-[#1e293b] border border-gray-700 rounded-xl w-[700px] h-[600px] flex flex-col shadow-2xl overflow-hidden">
+                    <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-[#0f172a]">
+                        <h3 class="text-lg font-bold text-gray-100 flex items-center gap-2">
+                            <span class="text-emerald-400">📜</span> 提示词模板管理 (Prompt Templates)
+                        </h3>
+                        <button @click="showRules = false"
+                            class="text-gray-400 hover:text-white transition-colors">✕</button>
+                    </div>
+                    <div class="flex-1 flex overflow-hidden">
+                        <!-- Rule List -->
+                        <div class="w-56 border-r border-gray-700 bg-[#0f172a] flex flex-col">
+                            <div class="p-3 border-b border-gray-800 flex justify-between items-center">
+                                <span class="text-xs font-bold text-gray-500 uppercase">我的模板</span>
+                                <button @click="createRule"
+                                    class="text-blue-400 hover:text-blue-300 text-xs px-2 py-1 bg-blue-500/10 rounded transition-colors">
+                                    + 新增
+                                </button>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                <div v-for="rule in rulesList" :key="rule" @click="selectRule(rule)"
+                                    class="px-3 py-2 rounded-lg cursor-pointer text-sm flex justify-between items-center group transition-all"
+                                    :class="selectedRuleName === rule ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'hover:bg-[#1e293b] text-gray-400'">
+                                    <span class="truncate">{{ rule }}</span>
+                                    <span v-if="rule === 'default' || activeRule === rule" class="text-[10px]"
+                                        :class="activeRule === rule ? 'text-yellow-400' : 'text-gray-600'">⭐</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Rule Editor -->
+                        <div class="flex-1 flex flex-col bg-[#1e293b]" v-if="selectedRuleName">
+                            <div class="p-3 border-b border-gray-700 flex justify-between items-center bg-[#1e293b]">
+                                <span class="text-sm font-mark text-gray-200 font-mono">{{ selectedRuleName }}</span>
+                                <div class="flex gap-2" v-if="selectedRuleName !== 'default'">
+                                    <button v-if="activeRule !== selectedRuleName"
+                                        @click="activateRule(selectedRuleName)"
+                                        class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded hover:bg-emerald-500/20 transition-all">
+                                        激活 (Activate)
+                                    </button>
+                                    <button v-if="activeRule === selectedRuleName" @click="activateRule(null)"
+                                        class="text-xs bg-yellow-500/10 text-yellow-500 border border-yellow-500/30 px-3 py-1 rounded hover:bg-yellow-500/20 transition-all">
+                                        停用 (Deactivate)
+                                    </button>
+                                    <button @click="deleteRule(selectedRuleName)"
+                                        class="text-xs text-red-400 hover:text-red-300 px-2 py-1 transition-colors">
+                                        🗑️
+                                    </button>
+                                    <button @click="saveRule"
+                                        class="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-500 shadow-lg font-medium transition-all">
+                                        保存 (Save)
+                                    </button>
+                                </div>
+                                <div v-else class="text-xs text-gray-500 italic bg-gray-800/50 px-2 py-1 rounded">
+                                    系统默认 (只读)
+                                </div>
+                            </div>
+                            <textarea v-model="ruleContent" :readonly="selectedRuleName === 'default'"
+                                class="flex-1 bg-[#0f172a] text-gray-300 p-4 text-sm font-mono outline-none resize-none mx-0 border-none leading-relaxed"
+                                :class="selectedRuleName === 'default' ? 'opacity-70 cursor-not-allowed' : ''"
+                                placeholder="在此输入系统提示词/指令..."></textarea>
+                        </div>
+                        <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-500">
+                            <p class="text-sm">请选择一个模板进行编辑</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Rule Modal -->
+            <div v-if="showNewRuleModal"
+                class="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] animation-fade-in">
+                <div class="bg-[#1e293b] border border-gray-700 rounded-xl w-80 p-5 shadow-2xl">
+                    <h3 class="text-md font-bold mb-4 text-white">创建新模板</h3>
+                    <input v-model="newRuleName" @keyup.enter="confirmCreateRule" placeholder="模板名称 (例如: python_expert)"
+                        autofocus
+                        class="w-full bg-[#0f172a] border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 text-white mb-4 placeholder-gray-600">
+                    <div class="flex justify-end gap-2">
+                        <button @click="showNewRuleModal = false"
+                            class="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">取消</button>
+                        <button @click="confirmCreateRule"
+                            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs text-white font-bold transition-all shadow-lg">创建</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Theme Market Modal -->
+            <div v-if="showThemeMarket"
+                class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animation-fade-in p-4">
+                <div
+                    class="bg-[#1e293b] border border-gray-700 rounded-xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+                    <!-- Header -->
+                    <div
+                        class="p-5 border-b border-gray-700 flex justify-between items-center bg-gradient-to-r from-purple-900/30 to-blue-900/30">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">🎨</span>
+                            <div>
+                                <h3 class="text-xl font-bold text-white">主题市场</h3>
+                                <p class="text-xs text-gray-400 mt-0.5">发现并应用精美主题</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <!-- Import Theme -->
+                            <label
+                                class="px-3 py-2 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-medium hover:bg-blue-600/30 transition-all cursor-pointer flex items-center gap-2">
+                                <i class="fas fa-upload"></i> 导入主题
+                                <input type="file" accept=".json"
+                                    @change="e => { if(e.target.files[0]) importTheme(e.target.files[0]); e.target.value = ''; }"
+                                    class="hidden">
+                            </label>
+                            <button @click="showThemeMarket = false; cancelPreview()"
+                                class="text-gray-400 hover:text-white transition-colors p-2">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[#0f172a]">
+                        <!-- Loading State -->
+                        <div v-if="isLoadingThemes" class="flex items-center justify-center h-64">
+                            <div class="text-center">
+                                <div class="animate-spin text-4xl mb-3">⟳</div>
+                                <p class="text-gray-400">加载主题中...</p>
+                            </div>
+                        </div>
+
+                        <!-- Theme Grid -->
+                        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div v-for="theme in themesList" :key="theme.name"
+                                class="group bg-[#1e293b] border border-gray-700 rounded-xl overflow-hidden hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300">
+                                <!-- Theme Preview (Terminal Colors) -->
+                                <div class="h-32 p-4 relative overflow-hidden"
+                                    :style="{ background: `linear-gradient(135deg, ${getThemePreviewGradient(theme.name)})` }">
+                                    <div class="absolute inset-0 bg-black/20"></div>
+                                    <div class="relative z-10 font-mono text-xs space-y-1 opacity-80">
+                                        <div class="text-green-400">$ echo "{{ theme.displayName }}"</div>
+                                        <div class="text-blue-300">{{ theme.description.substring(0, 30) }}...</div>
+                                        <div class="text-yellow-300">{{ theme.author }}</div>
+                                    </div>
+                                    <!-- 当前使用标记 -->
+                                    <div v-if="config.theme === theme.name"
+                                        class="absolute top-2 right-2 bg-blue-600 text-xs px-2 py-0.5 rounded text-white">
+                                        Active
+                                    </div>
+                                </div>
+
+                                <!-- Theme Info -->
+                                <div class="p-4">
+                                    <div class="flex items-start justify-between mb-2">
+                                        <div class="flex-1 min-w-0">
+                                            <h4 class="font-bold text-white text-sm truncate">{{ theme.displayName }}
+                                            </h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">by {{ theme.author }}</p>
+                                        </div>
+                                        <span v-if="theme.builtin"
+                                            class="ml-2 text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/30 shrink-0">
+                                            内置
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">{{
+                                        theme.description
+                                        }}</p>
+
+                                    <!-- Actions -->
+                                    <div class="flex gap-2">
+                                        <button v-if="config.theme !== theme.name" @click="applyTheme(theme.name)"
+                                            class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg">
+                                            应用
+                                        </button>
+                                        <button v-else
+                                            class="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-default">
+                                            已应用
+                                        </button>
+                                        <button @click="previewThemeAction(theme.name)"
+                                            class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs font-medium transition-all"
+                                            title="预览">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button @click="exportTheme(theme.name)"
+                                            class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs font-medium transition-all"
+                                            title="导出">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button v-if="!theme.builtin" @click="deleteTheme(theme.name)"
+                                            class="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs font-medium transition-all"
+                                            title="删除">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div v-if="!isLoadingThemes && themesList.length === 0"
+                            class="flex flex-col items-center justify-center h-64 text-gray-500">
+                            <div class="text-6xl mb-4">🎨</div>
+                            <p class="text-lg font-medium">暂无主题</p>
+                            <p class="text-sm mt-2">导入自定义主题开始使用</p>
+                        </div>
+                    </div>
+
+                    <!-- Footer (Preview Mode) -->
+                    <div v-if="previewTheme"
+                        class="p-4 border-t border-gray-700 bg-[#1e293b] flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="text-yellow-400">👁️</span>
+                            <div>
+                                <p class="text-sm font-medium text-white">预览模式: {{ previewTheme.displayName }}</p>
+                                <p class="text-xs text-gray-400">关闭主题市场将恢复原主题</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="cancelPreview()"
+                                class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-xs font-medium transition-all">
+                                取消预览
+                            </button>
+                            <button @click="applyTheme(previewTheme.name); previewTheme = null"
+                                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg">
+                                应用此主题
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toast Container -->
+            <div class="fixed top-6 right-6 z-[9999] space-y-3 pointer-events-none">
+                <div v-for="toast in toasts" :key="toast.id"
+                    class="toast-enter pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg shadow-2xl border-l-4 w-[320px] backdrop-blur-md bg-[#1e293b]/95"
+                    :class="{
+                'border-green-500 text-green-100': toast.type === 'success',
+                'border-red-500 text-red-100': toast.type === 'error',
+                'border-blue-500 text-blue-100': toast.type === 'info',
+                'border-yellow-500 text-yellow-100': toast.type === 'warning'
+             }">
+                    <div class="text-lg mt-0.5">
+                        {{ toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : toast.type === 'warning' ?
+                        '⚠️' :
+                        'ℹ️' }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h4 class="font-bold text-sm leading-tight mb-1">{{ toast.title }}</h4>
+                        <p class="text-xs opacity-90 leading-relaxed break-words">{{ toast.message }}</p>
+                    </div>
+                    <button @click="removeToast(toast.id)"
+                        class="opacity-50 hover:opacity-100 -mr-1 -mt-1 p-1">✕</button>
+                </div>
+            </div>
+
+            <!-- Generic Confirmation Modal -->
+            <div v-if="confirmModal.visible"
+                class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] animation-fade-in">
+                <div
+                    class="bg-[#1e293b] border border-gray-700 rounded-xl w-[400px] p-0 shadow-2xl transform scale-100">
+                    <div
+                        class="p-4 border-b border-gray-700 flex justify-between items-center bg-[#0f172a] rounded-t-xl">
+                        <h3 class="font-bold text-white">{{ confirmModal.title }}</h3>
+                        <button @click="closeConfirm(false)"
+                            class="text-gray-400 hover:text-white transition-colors">✕</button>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-gray-300 leading-relaxed">{{ confirmModal.message }}</p>
+                    </div>
+                    <div class="p-4 bg-[#0f172a]/50 rounded-b-xl flex justify-end gap-3">
+                        <button @click="closeConfirm(false)"
+                            class="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">
+                            Cancel
+                        </button>
+                        <button @click="closeConfirm(true)"
+                            class="px-4 py-2 rounded-lg text-sm text-white font-bold bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/20 transition-all">
+                            Confirm
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selection Overlay (Chat Only) -->
+            <div v-if="selectionOverlay.visible && selectionOverlay.type === 'chat'"
+                :style="{ top: selectionOverlay.y + 'px', left: selectionOverlay.x + 'px', transform: 'translateX(-50%)' }"
+                class="selection-toolbar fixed z-[100] bg-[#1e293b] text-white text-xs rounded-lg shadow-xl border border-gray-700 flex overflow-hidden scale-100 animation-fade-in">
+                <button @click.stop.prevent="sendToTerm"
+                    class="px-3 py-2 hover:bg-blue-600 transition-colors border-r border-gray-700 flex items-center gap-2 cursor-pointer">
+                    <span>💻</span> To Term
+                </button>
+                <button @click.stop.prevent="copySelection"
+                    class="px-3 py-2 hover:bg-blue-600 transition-colors flex items-center gap-2 cursor-pointer">
+                    <span>📋</span> Copy
+                </button>
+            </div>
+
+            <!-- Context Menu (Terminal Only) -->
+            <div v-if="contextMenu.visible && contextMenu.text"
+                :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+                class="terminal-context-menu fixed z-[100] bg-[#1e293b] text-white text-sm rounded-lg shadow-2xl border border-gray-700 w-40 overflow-hidden font-sans animation-fade-in">
+                <div
+                    class="px-3 py-1.5 text-[10px] font-bold text-gray-500 uppercase bg-[#0f172a] border-b border-gray-700 select-none">
+                    Terminal Action</div>
+                <button @click="contextAction('toChat')"
+                    class="w-full text-left px-3 py-2.5 hover:bg-blue-600 transition-colors flex items-center gap-2.5 text-gray-200 group">
+                    <i
+                        class="fas fa-comment-dots w-4 text-center text-gray-400 group-hover:text-white transition-colors"></i>
+                    <span>To Chat</span>
+                </button>
+                <button @click="contextAction('copy')"
+                    class="w-full text-left px-3 py-2.5 hover:bg-blue-600 transition-colors flex items-center gap-2.5 text-gray-200 group">
+                    <i class="fas fa-copy w-4 text-center text-gray-400 group-hover:text-white transition-colors"></i>
+                    <span>Copy</span>
+                </button>
+                <div class="h-px bg-gray-700 my-1"></div>
+                <button @click="contextAction('run')"
+                    class="w-full text-left px-3 py-2.5 hover:bg-red-600/20 text-red-400 hover:text-red-300 transition-colors flex items-center gap-2.5 group">
+                    <i class="fas fa-bolt w-4 text-center group-hover:animate-pulse"></i>
+                    <span>Run Command</span>
+                </button>
+            </div>
+        </div>
+        {% endraw %}
+
+    </div> <!-- End of #app -->
+
+    <!-- Vue App Logic -->
+    <!-- Local UMD Scripts -->
+    <script src="/static/js/libs/vue.global.js"></script>
+    <script src="/static/js/libs/xterm.js"></script>
+    <script src="/static/js/libs/xterm-addon-fit.js"></script>
+    <script src="/static/js/libs/marked.min.js"></script>
+    <!-- Highlight.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- Main App Logic -->
+    <script src="/static/js/main.js?v=2.5.1"></script>
+</body>
+
+</html>

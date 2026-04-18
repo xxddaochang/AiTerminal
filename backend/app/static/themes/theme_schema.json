@@ -1,0 +1,147 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "AI-TERM Theme Configuration",
+    "description": "主题配置文件的标准格式定义",
+    "type": "object",
+    "required": [
+        "name",
+        "terminal",
+        "hljs"
+    ],
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "主题名称 (唯一标识符)"
+        },
+        "displayName": {
+            "type": "string",
+            "description": "显示名称 (用户可见)"
+        },
+        "description": {
+            "type": "string",
+            "description": "主题描述"
+        },
+        "author": {
+            "type": "string",
+            "description": "作者名称"
+        },
+        "version": {
+            "type": "string",
+            "description": "版本号",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "terminal": {
+            "type": "object",
+            "description": "Xterm.js 终端配色",
+            "required": [
+                "background",
+                "foreground"
+            ],
+            "properties": {
+                "background": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "foreground": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "cursor": {
+                    "type": "string"
+                },
+                "cursorAccent": {
+                    "type": "string"
+                },
+                "selectionBackground": {
+                    "type": "string"
+                },
+                "black": {
+                    "type": "string"
+                },
+                "red": {
+                    "type": "string"
+                },
+                "green": {
+                    "type": "string"
+                },
+                "yellow": {
+                    "type": "string"
+                },
+                "blue": {
+                    "type": "string"
+                },
+                "magenta": {
+                    "type": "string"
+                },
+                "cyan": {
+                    "type": "string"
+                },
+                "white": {
+                    "type": "string"
+                },
+                "brightBlack": {
+                    "type": "string"
+                },
+                "brightRed": {
+                    "type": "string"
+                },
+                "brightGreen": {
+                    "type": "string"
+                },
+                "brightYellow": {
+                    "type": "string"
+                },
+                "brightBlue": {
+                    "type": "string"
+                },
+                "brightMagenta": {
+                    "type": "string"
+                },
+                "brightCyan": {
+                    "type": "string"
+                },
+                "brightWhite": {
+                    "type": "string"
+                }
+            }
+        },
+        "hljs": {
+            "type": "string",
+            "description": "Highlight.js 主题名称",
+            "enum": [
+                "atom-one-dark",
+                "atom-one-light",
+                "github",
+                "github-dark",
+                "dracula",
+                "monokai",
+                "nord",
+                "solarized-dark",
+                "solarized-light",
+                "vs",
+                "vs2015",
+                "tokyo-night-dark",
+                "gruvbox-dark",
+                "gruvbox-light"
+            ]
+        },
+        "ui": {
+            "type": "object",
+            "description": "UI 组件配色 (可选扩展)",
+            "properties": {
+                "chatBubbleUser": {
+                    "type": "string"
+                },
+                "chatBubbleAi": {
+                    "type": "string"
+                },
+                "buttonPrimary": {
+                    "type": "string"
+                },
+                "buttonSecondary": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
